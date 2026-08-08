@@ -24,7 +24,11 @@ async function queryMemory({queryVector,limit=5,metadata}){
     const data=await cohortChatGptIndex.query({
         vector:queryVector,
         topK:limit,  // topk tells that closest point dedo jitni limit hai for ex 5 hai to 5 closest point dedo ek vector ke
-        filter: metadata ? {metadata} : undefined,
+        filter: {
+        user: {
+        $eq: "userId"
+        }
+       },   //filter: metadata ? {metadata} : undefined
         includeMetadata:true
     })
     return data.matches

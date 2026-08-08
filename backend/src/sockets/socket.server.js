@@ -26,11 +26,13 @@ function initSocketServer(httpServer){
         }
 
     })
+    console.log("1");
 
     io.on("connection",(socket)=>{
         // console.log("uśēr connected",socket.user)
         // console.log("new socket connection",socket.id)
         socket.on("ai-message",async (content)=>{
+            console.log("2");
             console.log(content)
 
             const message=await messageModel.create({
@@ -39,13 +41,16 @@ function initSocketServer(httpServer){
                 content:content.text,
                 role:"user"
             })
+            console.log("3");
             console.log("initilaizing vectors")
             const vectors=await aiService.generateVectors(content.text)  // we are generating the vectors these vectors are now passed to the createMemory method
 
             const memory=await queryMemory({
                 queryVector:vectors,
                 limit:3,
-                metadata:{}
+                metadata:{
+                    user:socket.user._id
+                }
             })
             
 
@@ -59,14 +64,19 @@ function initSocketServer(httpServer){
                 }
             })
 
-            console.log(memory)
+            
 
             
 
 
-            const chatHistory= await messageModel.find({
-                chat:content.chat
+            const chatHistory = await messageModel.find({
+                 chat: content.chat
             })
+            .sort({ createdAt: -1 })
+            .limit(20)
+            .lean();
+
+            chatHistory.reverse();
 
             // console.log("chat history",chatHistory.map(item=>{
             //     return{
@@ -74,12 +84,23 @@ function initSocketServer(httpServer){
             //         parts:[{text:item.content}]
             //     }
             // }))
-            const response=await aiService.generateResponse(chatHistory.map(item=>{  //  model conversation sequence ke hisaab se usi ka jawab deta hai jo next to bot hota h or last question asked by user only
+            const stm=chatHistory.map(item=>{  //  model conversation sequence ke hisaab se usi ka jawab deta hai jo next to bot hota h or last question asked by user only
                 return{
                     role:item.role,
                     parts:[{text:item.content}]
                 }
-            }))
+            })
+
+            const ltm=[{
+                role:"system",
+                parts:[{text:`these are some of the previous chats used them to generate response
+                    ${memory.map(item=>item.metadata.text).join("/n")}`}]
+            }]
+
+            console.log("ltm",[...ltm]);
+            console.log("stm",[...stm]);
+            const response=await aiService.generateResponse([...ltm,...stm])
+            console.log("ai");
 
            const responseMessage= await messageModel.create({
                 chat:content.chat,
